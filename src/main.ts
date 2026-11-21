@@ -10,7 +10,18 @@ import type { HandFeatures, Point } from './input/hands';
 import { clamp01, heightToUnit, unitToHeight } from './input/mapping';
 import { OneEuro } from './input/oneEuro';
 import { PinchDetector, pinchDistances } from './input/pinch';
-import { Quantizer, SCALES, chordNote, midiToFreq, midiToName, scaleNotesInRange } from './input/scales';
+import { startPointer } from './input/pointer';
+import {
+  NOTE_NAMES,
+  Quantizer,
+  SCALES,
+  SCALE_LABELS,
+  chordNote,
+  midiToFreq,
+  midiToName,
+  scaleNotesInRange,
+} from './input/scales';
+import { Recorder } from './render/recorder';
 import { Ruler } from './render/ruler';
 import { Scope } from './render/scope';
 import { View } from './render/view';
@@ -20,11 +31,12 @@ import { createTracker } from './tracking/tracker';
 import type { TrackedFrame, Tracker } from './tracking/tracker';
 import { Boot } from './ui/boot';
 import { buildEntries, handleKey } from './ui/commands';
-import type { Shell } from './ui/commands';
+import type { CameraDevice, Shell } from './ui/commands';
 import { Help } from './ui/help';
 import { Palette } from './ui/palette';
 import { Panels } from './ui/panels';
 import type { LiveControls } from './ui/panels';
+import { parseShare, writeShare } from './ui/share';
 import { colors, initTheme, reducedMotion } from './ui/theme';
 
 const HOLD_MS = 150; // keep sounding this long after the hand is lost
@@ -41,6 +53,9 @@ const must = <T extends Element>(sel: string): T => {
   return el;
 };
 
+// A shared link sets the sound before anything is built.
+Object.assign(settings, parseShare(new URLSearchParams(location.search)));
+
 const video = must<HTMLVideoElement>('#cam');
 const hint = must<HTMLElement>('#hint');
 const notice = must<HTMLElement>('#notice');
@@ -48,8 +63,14 @@ const notice = must<HTMLElement>('#notice');
 initTheme();
 const view = new View(must<HTMLCanvasElement>('#view'), video);
 const ruler = new Ruler(must<HTMLCanvasElement>('#ruler'));
-const scope = new Scope(must<HTMLCanvasElement>('#scope'));
-const panels = new Panels();
+const scopeCanvas = must<HTMLCanvasElement>('#scope');
+const scope = new Scope(scopeCanvas);
+const recorder = new Recorder(view, scopeCanvas, () => updateStatus());
+const panels = new Panels(
+  () => toggleRecording(),
+  () => document.body.classList.toggle('sheet'),
+);
+must<HTMLElement>('#p-cam').addEventListener('pointerdown', () => document.body.classList.remove('sheet'));
 const help = new Help(must<HTMLElement>('#help'));
 
 const shell: Shell = {
@@ -61,12 +82,21 @@ const shell: Shell = {
     palette.close();
     return any;
   },
+  toggleRecording: () => toggleRecording(),
+  recording: () => recorder.active,
+  cameras: () => cameras,
+  cameraId: () => cameraId,
+  useCamera: (id) => void startCamera(id).catch((err: unknown) => showNotice(`camera: ${cameraError(err)}`)),
 };
 const palette = new Palette(must<HTMLElement>('#palette'), buildEntries(shell));
 
 // ---------- state ----------
 let engine: Engine | null = null;
 let tracker: Tracker | null = null;
+let cameras: CameraDevice[] = [];
+let cameraId = '';
+/** No camera: the pointer plays instead. The reason stays on screen. */
+let pointerNotice: string | null = null;
 
 let hands: HandView[] = [];
 let guides: Guide[] = [];
@@ -242,6 +272,7 @@ function render(now: number): void {
   );
   ruler.draw({ guides, handY }, colors);
   scope.draw(engine?.analyser ?? null, colors);
+  recorder.draw(colors);
 
   if (now - lastFpsAt >= 1000) {
     trackFps = frames / ((now - lastFpsAt) / 1000);
@@ -254,6 +285,7 @@ function render(now: number): void {
 
 function updateStatus(): void {
   panels.updateStatus({
+    rec: recorder.active ? recorder.seconds : null,
     note: note === null ? '' : midiToName(note),
     hands: hands.length,
     trackFps,
@@ -264,12 +296,34 @@ function updateStatus(): void {
 
 /** A dark room is the most common reason tracking fails, so say it. */
 function checkLight(now: number): void {
+  if (pointerNotice !== null) return; // that notice stays
   const dark = settings.camera !== 'off' && !tracked && view.cameraLayer.brightness < LOW_LIGHT;
   if (!dark) darkSince = null;
   else darkSince ??= now;
   const show = darkSince !== null && now - darkSince > 2000;
   notice.hidden = !show;
   if (show) notice.textContent = "can't see your hands, more light helps";
+}
+
+function showNotice(text: string): void {
+  notice.textContent = text;
+  notice.hidden = false;
+}
+
+function toggleRecording(): void {
+  if (recorder.active) {
+    recorder.stop();
+    return;
+  }
+  if (!engine) return; // nothing to record before the first gesture
+  if (!Recorder.supported) {
+    showNotice('recording is not supported in this browser');
+    return;
+  }
+  const p = preset();
+  const scale = settings.scale === 'off' ? 'free' : `${NOTE_NAMES[settings.root] ?? 'C'} ${SCALE_LABELS[settings.scale]}`;
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  recorder.start(engine.stream, `${p.id} \u00b7 ${scale}`, `thereminal-${p.id}-${stamp}`);
 }
 
 // ---------- settings ----------
@@ -296,6 +350,9 @@ subscribe((changed) => {
   }
   panels.renderSetup();
   updateStatus();
+  if (changed === 'preset' || changed === 'scale' || changed === 'root' || changed === 'octave') {
+    writeShare(settings);
+  }
 });
 
 // ---------- boot ----------
@@ -322,10 +379,35 @@ trackerReady.then(
 
 function cameraError(err: unknown): string {
   const name = err instanceof Error ? err.name : '';
-  if (name === 'NotAllowedError') return 'blocked. allow the camera for this site, then press enter';
+  if (name === 'NotAllowedError') return 'not allowed';
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'no camera found';
   if (name === 'NotReadableError') return 'in use by another app';
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Opens a camera, the default one or a specific device, and lists what else exists. */
+async function startCamera(deviceId?: string): Promise<string> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: {
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 60 },
+      ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }),
+    },
+  });
+  // Only now let go of the old camera, so a failed switch keeps the picture.
+  if (video.srcObject instanceof MediaStream) for (const t of video.srcObject.getTracks()) t.stop();
+  video.srcObject = stream;
+  await video.play();
+  const s = stream.getVideoTracks()[0]?.getSettings();
+  cameraId = s?.deviceId ?? '';
+  // Labels are only available once permission has been given, which it now has.
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  cameras = devices
+    .filter((d) => d.kind === 'videoinput')
+    .map((d, i) => ({ id: d.deviceId, label: d.label.toLowerCase() || `camera ${i + 1}` }));
+  return `${s?.width ?? '?'}x${s?.height ?? '?'}, ${s?.frameRate?.toFixed(0) ?? '?'}fps`;
 }
 
 async function start(): Promise<void> {
@@ -344,28 +426,20 @@ async function start(): Promise<void> {
 
   try {
     boot.set('camera', 'camera', 'asking', 'wait');
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 }, facingMode: 'user' },
-    });
-    video.srcObject = stream;
-    await video.play();
-    const s = stream.getVideoTracks()[0]?.getSettings();
-    boot.set('camera', 'camera', `ok (${s?.width ?? '?'}x${s?.height ?? '?'}, ${s?.frameRate?.toFixed(0) ?? '?'}fps)`, 'ok');
+    boot.set('camera', 'camera', `ok (${await startCamera()})`, 'ok');
   } catch (err) {
-    if (!demo) {
-      started = false;
-      boot.set('camera', 'camera', cameraError(err), 'err');
-      return;
-    }
-    boot.set('camera', 'camera', 'none (demo)', 'ok');
+    // No camera is not a dead end: the pointer plays the same instrument.
+    if (!demo) pointerNotice = `camera off (${cameraError(err)}), using pointer`;
+    boot.set('camera', 'camera', demo ? 'none (demo)' : 'off, using pointer', 'ok');
   }
 
-  try {
-    tracker = await trackerReady;
-  } catch {
-    started = false; // the model line already shows what went wrong
-    return;
+  if (pointerNotice === null) {
+    try {
+      tracker = await trackerReady;
+    } catch {
+      started = false; // the model line already shows what went wrong
+      return;
+    }
   }
   await document.fonts.load('12px "IBM Plex Mono"').catch(() => undefined);
 
@@ -373,8 +447,19 @@ async function start(): Promise<void> {
   hint.hidden = false;
   rebuildGuides();
   updateStatus();
-  if (tracker) tracker.start(video, onFrame);
-  else startDemo(onFrame);
+  if (pointerNotice !== null) {
+    hint.textContent = 'move the pointer over the frame, or touch it';
+    showNotice(pointerNotice);
+    startPointer(
+      view.canvas,
+      () => ({ x: view.frame.x / view.dpr, y: view.frame.y / view.dpr, w: view.frame.w / view.dpr, h: view.frame.h / view.dpr }),
+      onFrame,
+    );
+  } else if (tracker) {
+    tracker.start(video, onFrame);
+  } else {
+    startDemo(onFrame);
+  }
   requestAnimationFrame(render);
 }
 

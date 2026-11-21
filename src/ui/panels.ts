@@ -2,7 +2,8 @@ import { PRESETS } from '../audio/presets';
 import type { Preset } from '../audio/presets';
 import { NOTE_NAMES, SCALE_LABELS } from '../input/scales';
 import { settings } from '../state';
-import { PALETTE_KEY, selectPreset } from './commands';
+import { PALETTE_KEY, cycleSetting, selectPreset } from './commands';
+import type { Cyclable } from './commands';
 
 // The DOM side of the interface: preset list, live controls, setup and status bar.
 // Canvases (camera, ruler, scope) live in ../render.
@@ -73,6 +74,8 @@ const el = <T extends HTMLElement>(id: string): T => {
 };
 
 export interface StatusInfo {
+  /** Seconds recorded so far, null when not recording. */
+  rec: number | null;
   note: string;
   hands: number;
   trackFps: number;
@@ -89,7 +92,18 @@ export class Panels {
   private rows: { row: Row; root: HTMLElement; segments: HTMLElement[]; text: HTMLElement; last: string }[] = [];
   private statusCells = new Map<string, HTMLElement>();
 
-  constructor() {
+  /**
+   * @param onRecord the rec cell was clicked
+   * @param onMenu the menu cell was clicked (phones, where the side panels are a sheet)
+   */
+  constructor(
+    private readonly onRecord: () => void,
+    private readonly onMenu: () => void,
+  ) {
+    this.setup.addEventListener('click', (e) => {
+      const name = (e.target as HTMLElement).dataset.cycle;
+      if (name) cycleSetting(name as Cyclable);
+    });
     this.buildStatus();
     this.renderPresets();
     this.renderControls();
@@ -158,26 +172,28 @@ export class Panels {
     }
   }
 
+  /** Each row is also a button: a click or tap steps to the next value. */
   renderSetup(): void {
-    const scale =
-      settings.scale === 'off' ? 'off' : `${NOTE_NAMES[settings.root] ?? 'C'} ${SCALE_LABELS[settings.scale]}`;
-    const octave = settings.octave === 0 ? '0' : settings.octave > 0 ? `+${settings.octave}` : String(settings.octave);
-    const rows: [string, string, string][] = [
-      ['scale', scale, 's / k'],
+    const octave = settings.octave > 0 ? `+${settings.octave}` : String(settings.octave);
+    const rows: [Cyclable, string, string][] = [
+      ['scale', SCALE_LABELS[settings.scale], 's'],
+      ['key', NOTE_NAMES[settings.root] ?? 'C', 'k'],
       ['octave', octave, '[ ]'],
       ['camera', settings.camera, 'v'],
       ['overlay', settings.overlay, 'h'],
       ['accent', settings.accent, 'a'],
+      ['theme', settings.theme, 'T'],
     ];
     this.setup.replaceChildren(
-      ...rows.flatMap(([label, value, key]) => {
+      ...rows.flatMap(([name, value, key]) => {
         const dt = document.createElement('dt');
-        dt.textContent = label;
+        dt.textContent = name;
         const dd = document.createElement('dd');
         dd.textContent = value;
         const hint = document.createElement('dd');
         hint.className = 'key';
         hint.textContent = key;
+        for (const cell of [dt, dd, hint]) cell.dataset.cycle = name;
         return [dt, dd, hint];
       }),
     );
@@ -185,14 +201,20 @@ export class Panels {
   }
 
   private buildStatus(): void {
-    const cell = (id: string, cls = 'cell'): HTMLElement => {
-      const span = document.createElement('span');
-      span.className = cls;
-      this.statusCells.set(id, span);
-      return span;
+    const cell = (id: string, cls = 'cell', tag = 'span'): HTMLElement => {
+      const node = document.createElement(tag);
+      node.className = cls;
+      this.statusCells.set(id, node);
+      return node;
     };
     const name = cell('name');
     name.textContent = 'thereminal';
+    const rec = cell('rec', 'cell rec', 'button');
+    rec.title = 'record up to 30 seconds (r)';
+    rec.addEventListener('click', this.onRecord);
+    const menu = cell('menu', 'cell menu', 'button');
+    menu.textContent = 'menu';
+    menu.addEventListener('click', this.onMenu);
     const keys = cell('keys', 'cell keys');
     keys.textContent = `[1-${PRESETS.length}] preset  [space] mute  [?] help  [${PALETTE_KEY}] commands`;
     const fd = document.createElement('a');
@@ -202,7 +224,7 @@ export class Panels {
     fd.title = 'flynndiener.ch';
     this.status.append(
       name, cell('preset'), cell('scale'), cell('note', 'cell live'), cell('hands'),
-      cell('fps'), cell('infer'), cell('out'), keys, fd,
+      cell('fps'), cell('infer'), cell('out'), rec, keys, menu, fd,
     );
   }
 
@@ -220,5 +242,11 @@ export class Panels {
     put('fps', `${info.trackFps.toFixed(0)}fps`);
     put('infer', `track ${info.inferMs.toFixed(0)}ms`);
     put('out', `out ${info.outMs.toFixed(0)}ms`);
+    const rec = this.statusCells.get('rec');
+    if (rec) {
+      const on = info.rec !== null;
+      rec.classList.toggle('on', on);
+      put('rec', on ? `rec 0:${String(info.rec).padStart(2, '0')}` : 'rec');
+    }
   }
 }

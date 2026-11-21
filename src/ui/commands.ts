@@ -28,10 +28,21 @@ export interface Entry {
   closes?: boolean;
 }
 
+export interface CameraDevice {
+  id: string;
+  label: string;
+}
+
+/** What the commands need from the rest of the app. */
 export interface Shell {
   toggleHelp(): void;
   openPalette(): void;
   closeOverlays(): boolean;
+  toggleRecording(): void;
+  recording(): boolean;
+  cameras(): CameraDevice[];
+  cameraId(): string;
+  useCamera(id: string): void;
 }
 
 const OCTAVE_RANGE = 2;
@@ -158,6 +169,25 @@ export function buildEntries(shell: Shell): Entry[] {
       })),
     },
     {
+      section: 'view',
+      title: 'camera device',
+      value: () => shell.cameras().find((c) => c.id === shell.cameraId())?.label ?? 'default',
+      choices: () =>
+        shell.cameras().map((c) => ({
+          title: c.label,
+          active: () => c.id === shell.cameraId(),
+          run: () => shell.useCamera(c.id),
+        })),
+    },
+    {
+      section: 'more',
+      title: 'record',
+      key: 'r',
+      value: () => (shell.recording() ? 'recording' : '30s max'),
+      run: shell.toggleRecording,
+      closes: true,
+    },
+    {
       section: 'more',
       title: 'smoothing',
       value: () => (settings.smoothing ? 'on' : 'off'),
@@ -167,8 +197,33 @@ export function buildEntries(shell: Shell): Entry[] {
   ];
 }
 
-function toggleTheme(): void {
-  set('theme', settings.theme === 'dark' ? 'light' : 'dark');
+export type Cyclable = 'scale' | 'key' | 'octave' | 'camera' | 'overlay' | 'accent' | 'theme';
+
+/** Steps a setting to its next value. Used by the keys and by taps on the setup panel. */
+export function cycleSetting(name: Cyclable): void {
+  switch (name) {
+    case 'scale':
+      set('scale', cycle(SCALE_IDS, settings.scale));
+      break;
+    case 'key':
+      set('root', (settings.root + 1) % 12);
+      break;
+    case 'octave':
+      set('octave', settings.octave >= OCTAVE_RANGE ? -OCTAVE_RANGE : settings.octave + 1);
+      break;
+    case 'camera':
+      set('camera', cycle(CAMERA_MODES, settings.camera));
+      break;
+    case 'overlay':
+      set('overlay', cycle(OVERLAY_MODES, settings.overlay));
+      break;
+    case 'accent':
+      set('accent', cycle(ACCENTS, settings.accent));
+      break;
+    case 'theme':
+      set('theme', settings.theme === 'dark' ? 'light' : 'dark');
+      break;
+  }
 }
 
 /** Direct keys. Listed here once, the help panel renders the same table. */
@@ -181,6 +236,7 @@ export const KEYS: readonly (readonly [string, string])[] = [
   ['v', 'camera style'],
   ['h', 'hand overlay'],
   ['a', 'accent colour'],
+  ['r', 'record, 30s max'],
   ['T', 'dark / light'],
   ['?', 'this help'],
   [PALETTE_KEY, 'all commands'],
@@ -209,10 +265,10 @@ export function handleKey(e: KeyboardEvent, shell: Shell): void {
       set('muted', !settings.muted);
       break;
     case 's':
-      set('scale', cycle(SCALE_IDS, settings.scale));
+      cycleSetting('scale');
       break;
     case 'k':
-      set('root', (settings.root + 1) % 12);
+      cycleSetting('key');
       break;
     case '[':
       shiftOctave(-1);
@@ -221,17 +277,20 @@ export function handleKey(e: KeyboardEvent, shell: Shell): void {
       shiftOctave(1);
       break;
     case 'v':
-      set('camera', cycle(CAMERA_MODES, settings.camera));
+      cycleSetting('camera');
       break;
     case 'h':
-      set('overlay', cycle(OVERLAY_MODES, settings.overlay));
+      cycleSetting('overlay');
       break;
     case 't':
     case 'T':
-      toggleTheme();
+      cycleSetting('theme');
       break;
     case 'a':
-      set('accent', cycle(ACCENTS, settings.accent));
+      cycleSetting('accent');
+      break;
+    case 'r':
+      shell.toggleRecording();
       break;
     case '?':
       shell.toggleHelp();
