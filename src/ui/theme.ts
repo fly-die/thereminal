@@ -1,59 +1,40 @@
 import { settings, subscribe } from '../state';
+import { ACCENT_COLORS, THEMES, hexToRgb } from './tokens';
+import type { ThemeColors } from './tokens';
 
-/** Colours the canvases draw with. Read from CSS so there is one source of truth. */
-export interface Colors {
-  bg: string;
-  fg: string;
-  dim: string;
-  faint: string;
-  line: string;
+/** Colours the canvases draw with, always in sync with the CSS variables. */
+export interface Colors extends ThemeColors {
   accent: string;
   /** "r, g, b" for building rgba() strings. */
   accentRgb: string;
   fgRgb: string;
+  dark: boolean;
 }
 
-function toRgb(color: string): string {
-  const hex = color.trim().replace('#', '');
-  const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex;
-  const n = Number.parseInt(full, 16);
-  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
-}
-
-function read(): Colors {
-  const css = getComputedStyle(document.documentElement);
-  const v = (name: string): string => css.getPropertyValue(name).trim();
+function current(): Colors {
+  const theme = THEMES[settings.theme];
+  const accent = ACCENT_COLORS[settings.accent][settings.theme];
   return {
-    bg: v('--bg'),
-    fg: v('--fg'),
-    dim: v('--dim'),
-    faint: v('--faint'),
-    line: v('--line'),
-    accent: v('--accent'),
-    accentRgb: toRgb(v('--accent')),
-    fgRgb: toRgb(v('--fg')),
+    ...theme,
+    accent,
+    accentRgb: hexToRgb(accent).join(', '),
+    fgRgb: hexToRgb(theme.fg).join(', '),
+    dark: settings.theme === 'dark',
   };
 }
 
-export const colors: Colors = {
-  bg: '#070707', fg: '#ededea', dim: '#8a8a86', faint: '#55554f', line: '#2c2c2c',
-  accent: '#6fffa0', accentRgb: '111, 255, 160', fgRgb: '237, 237, 234',
-};
-
-const themeListeners: (() => void)[] = [];
-export function onThemeChange(listener: () => void): void {
-  themeListeners.push(listener);
-}
+export const colors: Colors = current();
 
 function apply(): void {
+  Object.assign(colors, current());
   const root = document.documentElement;
   root.dataset.theme = settings.theme;
   root.dataset.accent = settings.accent;
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', settings.theme === 'dark' ? '#070707' : '#f4f4f1');
-  Object.assign(colors, read());
-  for (const listener of themeListeners) listener();
+  for (const key of ['bg', 'fg', 'dim', 'faint', 'line', 'accent'] as const) {
+    root.style.setProperty(`--${key}`, colors[key]);
+  }
+  root.style.colorScheme = settings.theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', colors.bg);
 }
 
 export function initTheme(): void {

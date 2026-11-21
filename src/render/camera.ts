@@ -132,7 +132,7 @@ export class CameraLayer {
       canvas.height = rows * CELL_H;
     }
     g.clearRect(0, 0, canvas.width, canvas.height);
-    const dark = colors.bg === '#070707';
+    const { dark } = colors;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const y = grid[r * cols + c] ?? 0;
@@ -156,7 +156,7 @@ export class CameraLayer {
     }
     const image = g.createImageData(cols, rows);
     const [r, gr, b] = colors.fgRgb.split(',').map(Number);
-    const dark = colors.bg === '#070707';
+    const { dark } = colors;
     const at = (x: number, y: number): number => grid[y * cols + x] ?? 0;
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
