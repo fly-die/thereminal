@@ -1,0 +1,84 @@
+<!doctype html>
+<!--
+  Source for public/og.png (1200x630). Render with headless Chrome:
+  chrome --headless=new --hide-scrollbars --force-device-scale-factor=1 \
+    --window-size=1200,630 --screenshot=public/og.png scripts/og.html
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "IBM Plex Mono";
+        font-weight: 400;
+        src: url("../public/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Mono";
+        font-weight: 500;
+        src: url("../public/fonts/IBMPlexMono-Medium.woff2") format("woff2");
+      }
+      * { box-sizing: border-box; margin: 0; }
+      html, body { width: 1200px; height: 630px; overflow: hidden; }
+      body {
+        background: #070707;
+        color: #ededea;
+        font: 400 22px/1.4 "IBM Plex Mono", monospace;
+        padding: 44px 48px 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .panel { position: relative; border: 1px solid #2f2f2f; }
+      .panel > .title {
+        position: absolute; top: -16px; left: 22px;
+        background: #070707; padding: 0 10px; color: #8a8a86;
+      }
+      .main { flex: 1; padding: 56px 56px 0; display: flex; flex-direction: column; }
+      .brand { display: flex; align-items: center; gap: 32px; }
+      .brand img { width: 112px; height: 112px; }
+      h1 { font-weight: 500; font-size: 92px; letter-spacing: -2px; line-height: 1; }
+      .lede { margin-top: 36px; font-size: 30px; color: #b9b9b4; }
+      .lede span { color: #7c7c78; }
+      .scope { margin-top: auto; height: 120px; border-left: 0; border-right: 0; border-bottom: 0; }
+      .scope svg { display: block; width: 100%; height: 100%; }
+      .status {
+        height: 62px; display: flex; align-items: center; justify-content: space-between;
+        color: #8a8a86; font-size: 20px;
+      }
+      .status b { font-weight: 400; color: #ededea; }
+    </style>
+  </head>
+  <body>
+    <div class="panel main">
+      <span class="title">thereminal</span>
+      <div class="brand">
+        <img src="../public/favicon.svg" alt="" />
+        <h1>thereminal</h1>
+      </div>
+      <p class="lede">
+        a synthesizer you play with your hands in the air.<br />
+        <span>runs in your browser. nothing is uploaded.</span>
+      </p>
+      <div class="panel scope">
+        <span class="title">scope</span>
+        <svg id="scope" viewBox="0 0 1000 120" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+    <div class="status">
+      <span>[1-8] preset&nbsp;&nbsp;[space] mute&nbsp;&nbsp;[?] help</span>
+      <b>flynndiener.ch</b>
+    </div>
+    <script>
+      // A sine with slow vibrato and a swell, like a held theremin note.
+      const pts = [];
+      for (let x = 0; x <= 1000; x += 2) {
+        const t = x / 1000;
+        const env = 0.25 + 0.75 * Math.sin(Math.PI * t) ** 2;
+        const phase = 2 * Math.PI * (9 * t + 0.35 * Math.sin(2 * Math.PI * 2 * t));
+        pts.push(`${x},${(60 - 38 * env * Math.sin(phase)).toFixed(1)}`);
+      }
+      document.getElementById('scope').innerHTML =
+        `<polyline points="${pts.join(' ')}" fill="none" stroke="#ededea" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+    </script>
+  </body>
+</html>
