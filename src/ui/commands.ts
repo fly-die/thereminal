@@ -2,15 +2,30 @@ import { PRESETS } from '../audio/presets';
 import { NOTE_NAMES, SCALE_IDS, SCALE_LABELS } from '../input/scales';
 import { ACCENTS, CAMERA_MODES, OVERLAY_MODES, cycle, set, settings } from '../state';
 
-// Every action in the app is a command. The keyboard, the command palette and the
-// help panel all read from this one list, so they cannot drift apart.
+// Every setting in the app is an entry. The command palette and the keyboard both go
+// through the same functions, so they cannot drift apart.
 
-export interface Command {
-  group: string;
+/** One option of a setting, for example a single scale. */
+export interface Choice {
   title: string;
-  /** Key hint shown next to it, if it has a direct key. */
   key?: string;
+  active(): boolean;
   run(): void;
+}
+
+/** A row on the first level of the palette: a setting to open, or an action to run. */
+export interface Entry {
+  section: 'sound' | 'view' | 'more';
+  title: string;
+  /** Current value, shown next to the title. */
+  value?(): string;
+  key?: string;
+  /** Present on settings: the palette opens these as a second level. Read when opened. */
+  choices?(): Choice[];
+  /** Present on actions: runs straight away. */
+  run?(): void;
+  /** The palette stays open after most things, this one closes it. */
+  closes?: boolean;
 }
 
 export interface Shell {
@@ -34,20 +49,121 @@ const shiftOctave = (by: number): void =>
 export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 export const PALETTE_KEY = isMac ? '⌘K' : 'ctrl+K';
 
-export function buildCommands(shell: Shell): Command[] {
+const signed = (n: number): string => (n > 0 ? `+${n}` : String(n));
+
+export function buildEntries(shell: Shell): Entry[] {
   return [
-    ...PRESETS.map((p, i) => ({ group: 'preset', title: p.id, key: String(i + 1), run: () => selectPreset(i) })),
-    ...SCALE_IDS.map((id) => ({ group: 'scale', title: SCALE_LABELS[id], run: () => set('scale', id) })),
-    ...NOTE_NAMES.map((name, i) => ({ group: 'key', title: name, run: () => set('root', i) })),
-    { group: 'octave', title: 'up', key: ']', run: () => shiftOctave(1) },
-    { group: 'octave', title: 'down', key: '[', run: () => shiftOctave(-1) },
-    ...CAMERA_MODES.map((m) => ({ group: 'camera', title: m, run: () => set('camera', m) })),
-    ...OVERLAY_MODES.map((m) => ({ group: 'overlay', title: m, run: () => set('overlay', m) })),
-    ...ACCENTS.map((a) => ({ group: 'accent', title: a, run: () => set('accent', a) })),
-    { group: 'theme', title: 'toggle dark / light', key: 'T', run: toggleTheme },
-    { group: 'audio', title: 'mute / unmute', key: 'space', run: () => set('muted', !settings.muted) },
-    { group: 'input', title: 'toggle smoothing', run: () => set('smoothing', !settings.smoothing) },
-    { group: 'help', title: 'show help', key: '?', run: shell.toggleHelp },
+    {
+      section: 'sound',
+      title: 'preset',
+      key: `1-${PRESETS.length}`,
+      value: () => PRESETS[settings.preset]?.id ?? '',
+      choices: () =>
+        PRESETS.map((p, i) => ({
+        title: p.id,
+        key: String(i + 1),
+        active: () => settings.preset === i,
+        run: () => selectPreset(i),
+      })),
+    },
+    {
+      section: 'sound',
+      title: 'scale',
+      key: 's',
+      value: () => SCALE_LABELS[settings.scale],
+      choices: () =>
+        SCALE_IDS.map((id) => ({
+        title: SCALE_LABELS[id],
+        active: () => settings.scale === id,
+        run: () => set('scale', id),
+      })),
+    },
+    {
+      section: 'sound',
+      title: 'key',
+      key: 'k',
+      value: () => NOTE_NAMES[settings.root] ?? 'C',
+      choices: () =>
+        NOTE_NAMES.map((name, i) => ({
+        title: name,
+        active: () => settings.root === i,
+        run: () => set('root', i),
+      })),
+    },
+    {
+      section: 'sound',
+      title: 'octave',
+      key: '[ ]',
+      value: () => signed(settings.octave),
+      choices: () =>
+        [2, 1, 0, -1, -2].map((n) => ({
+        title: signed(n),
+        active: () => settings.octave === n,
+        run: () => set('octave', n),
+      })),
+    },
+    {
+      section: 'sound',
+      title: 'mute',
+      key: 'space',
+      value: () => (settings.muted ? 'on' : 'off'),
+      run: () => set('muted', !settings.muted),
+    },
+    {
+      section: 'view',
+      title: 'camera',
+      key: 'v',
+      value: () => settings.camera,
+      choices: () =>
+        CAMERA_MODES.map((m) => ({
+        title: m,
+        active: () => settings.camera === m,
+        run: () => set('camera', m),
+      })),
+    },
+    {
+      section: 'view',
+      title: 'hand overlay',
+      key: 'h',
+      value: () => settings.overlay,
+      choices: () =>
+        OVERLAY_MODES.map((m) => ({
+        title: m,
+        active: () => settings.overlay === m,
+        run: () => set('overlay', m),
+      })),
+    },
+    {
+      section: 'view',
+      title: 'accent',
+      key: 'a',
+      value: () => settings.accent,
+      choices: () =>
+        ACCENTS.map((a) => ({
+        title: a,
+        active: () => settings.accent === a,
+        run: () => set('accent', a),
+      })),
+    },
+    {
+      section: 'view',
+      title: 'theme',
+      key: 'T',
+      value: () => settings.theme,
+      choices: () =>
+        (['dark', 'light'] as const).map((t) => ({
+        title: t,
+        active: () => settings.theme === t,
+        run: () => set('theme', t),
+      })),
+    },
+    {
+      section: 'more',
+      title: 'smoothing',
+      value: () => (settings.smoothing ? 'on' : 'off'),
+      run: () => set('smoothing', !settings.smoothing),
+    },
+    { section: 'more', title: 'help', key: '?', run: shell.toggleHelp, closes: true },
   ];
 }
 

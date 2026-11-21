@@ -19,7 +19,7 @@ import { settings, subscribe } from './state';
 import { createTracker } from './tracking/tracker';
 import type { TrackedFrame, Tracker } from './tracking/tracker';
 import { Boot } from './ui/boot';
-import { buildCommands, handleKey } from './ui/commands';
+import { buildEntries, handleKey } from './ui/commands';
 import type { Shell } from './ui/commands';
 import { Help } from './ui/help';
 import { Palette } from './ui/palette';
@@ -62,7 +62,7 @@ const shell: Shell = {
     return any;
   },
 };
-const palette = new Palette(must<HTMLElement>('#palette'), buildCommands(shell));
+const palette = new Palette(must<HTMLElement>('#palette'), buildEntries(shell));
 
 // ---------- state ----------
 let engine: Engine | null = null;
