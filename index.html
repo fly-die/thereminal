@@ -31,8 +31,8 @@
         display: grid;
         grid-template-rows: 1fr auto;
       }
-      #stage { position: relative; min-height: 0; display: grid; place-items: center; }
-      canvas { max-width: 100%; max-height: 100%; display: block; }
+      #stage { position: relative; min-height: 0; overflow: hidden; }
+      canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
       video { display: none; }
       #boot {
         position: absolute; inset: 0; display: grid; place-items: center;
@@ -49,7 +49,7 @@
     <div id="stage">
       <video id="cam" playsinline muted></video>
       <canvas id="view"></canvas>
-      <pre id="boot">&gt; thereminal spike
+      <pre id="boot">&gt; thereminal v0.1
 &gt; all processing stays on this device. nothing is uploaded.
 &gt; [press enter / tap to start]</pre>
     </div>
