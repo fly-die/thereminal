@@ -9,7 +9,7 @@ import type { Preset, Voice } from './types';
 //   lfo -> oscillator detune (vibrato), fading in a moment after the note starts
 // Pitch snaps to semitones but glides slowly between them, so it still slides like a
 // theremin while staying in tune. Turn the scale off for the raw thing.
-// Hand: left/right = tone (dark to bright), open hand = more vibrato and space.
+// Hand: left/right = space (dry to echoing), open hand = brighter with more vibrato.
 
 interface Peak {
   hz: number;
@@ -48,7 +48,7 @@ export const THEREMIN_VARIANTS: readonly ThereminConfig[] = [
     vibratoHz: 4.8,
     vibratoCents: [0, 10],
     reverbSeconds: 3.5,
-    reverbSend: [0.3, 0.65],
+    reverbSend: [0.1, 0.65],
     echo: { time: 0.33, feedback: 0.35, mix: 0.22 },
     peak: 0.55,
   },
@@ -57,9 +57,9 @@ export const THEREMIN_VARIANTS: readonly ThereminConfig[] = [
 /** Pure parameter mapping, kept apart from the nodes so it can be unit tested. */
 export function thereminParams(cfg: ThereminConfig, timbre: number, macro: number) {
   return {
-    cutoffHz: expLerp(cfg.cutoffHz[0], cfg.cutoffHz[1], timbre),
+    reverbSend: lerp(cfg.reverbSend[0], cfg.reverbSend[1], timbre),
+    cutoffHz: expLerp(cfg.cutoffHz[0], cfg.cutoffHz[1], macro),
     vibratoCents: lerp(cfg.vibratoCents[0], cfg.vibratoCents[1], macro),
-    reverbSend: lerp(cfg.reverbSend[0], cfg.reverbSend[1], macro),
   };
 }
 
@@ -132,14 +132,14 @@ function create(cfg: ThereminConfig, ctx: AudioContext): Voice {
       sounding = on;
     },
     setTimbre(value) {
-      const hz = thereminParams(cfg, value, 0).cutoffHz;
-      lowpass.frequency.setTargetAtTime(hz, ctx.currentTime, 0.05);
+      const wet = thereminParams(cfg, value, 0).reverbSend;
+      send.gain.setTargetAtTime(wet, ctx.currentTime, 0.1);
     },
     setMacro(value) {
       const p = thereminParams(cfg, 0, value);
       const now = ctx.currentTime;
       vibratoCents = p.vibratoCents;
-      send.gain.setTargetAtTime(p.reverbSend, now, 0.1);
+      lowpass.frequency.setTargetAtTime(p.cutoffHz, now, 0.05);
       if (sounding) vibrato.gain.setTargetAtTime(vibratoCents, now + 0.001, 0.25);
     },
     dispose() {
@@ -155,7 +155,7 @@ export const THEREMINS: readonly Preset[] = THEREMIN_VARIANTS.map((cfg) => ({
   lowMidi: 48, // C3
   octaves: 3,
   glide: 0.07,
-  timbreLabel: 'tone',
-  macroLabel: 'vibrato',
+  timbreLabel: 'space',
+  macroLabel: 'bright',
   create: (ctx: AudioContext) => create(cfg, ctx),
 }));
