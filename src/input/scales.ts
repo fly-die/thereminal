@@ -14,7 +14,18 @@ export const SCALES = {
 export type ScaleId = keyof typeof SCALES;
 export const SCALE_IDS = Object.keys(SCALES) as ScaleId[];
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
+export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
+
+export const SCALE_LABELS: Record<ScaleId, string> = {
+  off: 'off',
+  major: 'major',
+  minor: 'minor',
+  minpent: 'minor pent',
+  majpent: 'major pent',
+  dorian: 'dorian',
+  harmminor: 'harmonic minor',
+  chromatic: 'chromatic',
+};
 
 export const midiToFreq = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
 
@@ -37,6 +48,32 @@ export function scaleNotesInRange(
   const notes: number[] = [];
   for (let n = Math.ceil(low); n <= Math.floor(high); n++) if (inScale(n, root, scale)) notes.push(n);
   return notes;
+}
+
+/** Moves up a number of scale degrees from a note. */
+export function stepInScale(note: number, steps: number, root: number, scale: readonly number[]): number {
+  let n = note;
+  for (let left = steps; left > 0; ) {
+    n++;
+    if (inScale(n, root, scale)) left--;
+  }
+  return n;
+}
+
+/**
+ * Note for one of the four pinch fingers (0 = index). Seven-note scales give a stacked
+ * chord, pentatonic scales give neighbouring notes (every pair sounds good there), and
+ * without a scale it is a major chord in semitones.
+ */
+export function chordNote(
+  base: number,
+  finger: number,
+  root: number,
+  scale: readonly number[] | null,
+): number {
+  if (!scale || scale.length === 12) return base + ([0, 4, 7, 12][finger] ?? 0);
+  const steps = scale.length >= 7 ? [0, 2, 4, 7] : [0, 1, 2, 3];
+  return stepInScale(base, steps[finger] ?? 0, root, scale);
 }
 
 /** Closest scale note to a fractional pitch. Ties resolve downwards. */
