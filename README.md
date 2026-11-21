@@ -6,13 +6,26 @@
 
 A synthesizer you play with your hands in the air. Runs in the browser.
 
-Status: phase 0 spike. One sine voice, hand height sets pitch.
+Status: in development. Not deployed yet.
 
 ## What it does
 
 - **Tracks** your hands through the webcam, 21 points per hand.
-- **Plays** a synth voice from where your hand is. Higher hand, higher note.
+- **Plays** six presets: theremin, glass-pad, sub-reese, fm-bell, kalimba and wind.
 - **Stays local.** Camera frames are processed on your device and never uploaded.
+
+## Play
+
+| Gesture | Effect |
+| --- | --- |
+| Hand up / down | Pitch, snapped to the scale |
+| Hand left / right | Tone of the preset |
+| Open / close the hand | Louder and brighter, or quieter |
+| Fist | Mute |
+| Second hand up / down | Volume |
+| Pinch thumb and finger | Strike a note (fm-bell, kalimba) |
+
+Keys: `1-6` preset, `space` mute, `s` scale, `k` root key, `[` `]` octave, `v` camera style, `h` hand overlay, `a` accent colour, `T` dark or light, `?` help, `Cmd+K` or `Ctrl+K` all commands.
 
 ## How it works
 
@@ -20,9 +33,9 @@ Status: phase 0 spike. One sine voice, hand height sets pitch.
 
 - **Tracking:** MediaPipe HandLandmarker, WASM with GPU delegate. Model and runtime are served from this site, no CDN.
 - **Smoothing:** a One Euro filter. Steady when the hand rests, fast when it moves.
-- **Mapping:** hand height to pitch on an exponential scale, so equal distance means equal interval.
+- **Mapping:** hand height to pitch, quantized to the scale with hysteresis so a note does not flicker at its border.
 - **Synthesis:** Web Audio API. Every parameter change is ramped, so there are no clicks.
-- **Render:** Canvas 2D overlay on a dimmed, mirrored camera image.
+- **Render:** Canvas 2D. The camera is shown dimmed in black and white, or redrawn as ASCII, dither or edges.
 
 ## Privacy
 
