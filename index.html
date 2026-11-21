@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070707" />
+    <title>thereminal</title>
+    <meta name="description" content="A synthesizer you play with your hands in the air. Runs in the browser, nothing is uploaded." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="thereminal" />
+    <meta property="og:description" content="A synthesizer you play with your hands in the air. Runs in the browser, nothing is uploaded." />
+    <meta property="og:image" content="https://air.flynndiener.ch/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: #070707;
+        color: #d8d8d4;
+        font: 13px/1.5 "IBM Plex Mono", ui-monospace, Menlo, monospace;
+        display: grid;
+        grid-template-rows: 1fr auto;
+      }
+      #stage { position: relative; min-height: 0; display: grid; place-items: center; }
+      canvas { max-width: 100%; max-height: 100%; display: block; }
+      video { display: none; }
+      #boot {
+        position: absolute; inset: 0; display: grid; place-items: center;
+        background: #070707; white-space: pre; cursor: pointer;
+      }
+      #boot[hidden] { display: none; }
+      #status {
+        border-top: 1px solid #2a2a2a; padding: 6px 12px; color: #9a9a96;
+        white-space: pre; overflow: hidden; text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <video id="cam" playsinline muted></video>
+      <canvas id="view"></canvas>
+      <pre id="boot">&gt; thereminal spike
+&gt; all processing stays on this device. nothing is uploaded.
+&gt; [press enter / tap to start]</pre>
+    </div>
+    <div id="status">idle</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
