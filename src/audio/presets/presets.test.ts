@@ -26,12 +26,11 @@ describe('theremin params', () => {
   it('stay inside safe bounds for any input', () => {
     for (const t of STEPS) for (const m of STEPS) {
       const p = thereminParams(t, m);
-      expect(p.cutoffHz).toBeGreaterThanOrEqual(1400);
-      expect(p.cutoffHz).toBeLessThanOrEqual(7000);
-      expect(p.triangleMix).toBeGreaterThan(0);
-      expect(p.triangleMix).toBeLessThanOrEqual(0.4);
-      expect(p.vibratoCents).toBeGreaterThanOrEqual(0);
-      expect(p.vibratoCents).toBeLessThanOrEqual(32);
+      expect(p.cutoffHz).toBeGreaterThanOrEqual(900);
+      expect(p.cutoffHz).toBeLessThanOrEqual(5000);
+      expect(p.vibratoCents).toBeGreaterThanOrEqual(4);
+      expect(p.vibratoCents).toBeLessThanOrEqual(18);
+      expect(p.reverbSend).toBeGreaterThan(0);
       expect(p.reverbSend).toBeLessThanOrEqual(0.5);
     }
   });

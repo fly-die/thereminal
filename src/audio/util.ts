@@ -32,14 +32,3 @@ export function makeImpulse(
   }
   return buffer;
 }
-
-/** Soft saturation curve for a WaveShaperNode. */
-export function tanhCurve(drive: number, size = 1024): Float32Array<ArrayBuffer> {
-  const curve = new Float32Array(new ArrayBuffer(size * 4));
-  const norm = Math.tanh(drive);
-  for (let i = 0; i < size; i++) {
-    const x = (i / (size - 1)) * 2 - 1;
-    curve[i] = Math.tanh(x * drive) / norm;
-  }
-  return curve;
-}
