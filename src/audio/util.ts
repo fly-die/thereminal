@@ -32,3 +32,22 @@ export function makeImpulse(
   }
   return buffer;
 }
+
+/** Soft saturation curve for a WaveShaperNode. */
+export function tanhCurve(drive: number, size = 1024): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(new ArrayBuffer(size * 4));
+  const norm = Math.tanh(drive);
+  for (let i = 0; i < size; i++) {
+    const x = (i / (size - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * drive) / norm;
+  }
+  return curve;
+}
+
+/** A loop of white noise. */
+export function makeNoise(ctx: BaseAudioContext, seconds = 2): AudioBuffer {
+  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  return buffer;
+}

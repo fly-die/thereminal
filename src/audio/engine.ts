@@ -81,6 +81,11 @@ export class Engine {
     active.voice.setLevel(c.level);
   }
 
+  /** Strikes a note on a pluck preset. */
+  trigger(hz: number, velocity: number): void {
+    this.active?.voice.trigger?.(hz, velocity);
+  }
+
   silence(): void {
     this.active?.voice.setLevel(0);
   }

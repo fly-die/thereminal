@@ -11,11 +11,15 @@ export interface Voice {
   setTimbre(value: number): void;
   /** Hand openness, 0 = nearly closed, 1 = flat open. */
   setMacro(value: number): void;
+  /** Strikes one note. Only on pluck presets. */
+  trigger?(hz: number, velocity: number): void;
   dispose(): void;
 }
 
 export interface Preset {
   readonly id: string;
+  /** continuous: sounds while a hand is up. pluck: a pinch strikes a note. */
+  readonly mode: 'continuous' | 'pluck';
   readonly scale: ScaleId;
   /** Lowest playable note (MIDI) at the bottom of the frame. */
   readonly lowMidi: number;

@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { SCALES } from '../../input/scales';
+import { fmBellParams } from './fmBell';
 import { glassPadParams } from './glassPad';
 import { PRESETS } from './index';
+import { kalimbaParams } from './kalimba';
+import { subReeseParams } from './subReese';
 import { THEREMIN_VARIANTS, thereminParams } from './theremin';
+import { windParams } from './wind';
 
 const STEPS = [-1, 0, 0.25, 0.5, 0.75, 1, 2]; // includes out of range input on purpose
 
@@ -59,5 +63,54 @@ describe('glass-pad params', () => {
 
   it('opens the filter as the hand opens', () => {
     expect(glassPadParams(0.5, 1).cutoffHz).toBeGreaterThan(glassPadParams(0.5, 0).cutoffHz);
+  });
+});
+
+describe('sub-reese params', () => {
+  it('keep the filter and drive in a safe range', () => {
+    for (const t of STEPS) for (const m of STEPS) {
+      const p = subReeseParams(t, m);
+      expect(p.cutoffHz).toBeGreaterThanOrEqual(60);
+      expect(p.cutoffHz).toBeLessThanOrEqual(3000);
+      expect(p.resonance).toBeLessThanOrEqual(6); // above this the filter starts to ring
+      expect(p.drive).toBeGreaterThan(0);
+      expect(p.drive).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe('wind params', () => {
+  it('compensate level for a narrower band', () => {
+    expect(windParams(1, 0).makeup).toBeGreaterThan(windParams(0, 0).makeup);
+    for (const t of STEPS) {
+      const p = windParams(t, 0.5);
+      expect(p.q).toBeGreaterThanOrEqual(1.5);
+      expect(p.q).toBeLessThanOrEqual(28);
+      expect(p.makeup).toBeLessThanOrEqual(5);
+    }
+  });
+});
+
+describe('fm-bell params', () => {
+  it('stay musical for any input', () => {
+    for (const t of STEPS) for (const m of STEPS) {
+      const p = fmBellParams(t, m);
+      expect(p.index).toBeGreaterThanOrEqual(1.5);
+      expect(p.index).toBeLessThanOrEqual(7);
+      expect(p.decaySeconds).toBeGreaterThanOrEqual(1.2);
+      expect(p.decaySeconds).toBeLessThanOrEqual(5);
+      expect(p.echoSend).toBeLessThanOrEqual(0.55);
+    }
+  });
+});
+
+describe('kalimba params', () => {
+  it('never let the string ring forever', () => {
+    for (const t of STEPS) {
+      const p = kalimbaParams(t);
+      expect(p.sustain).toBeLessThan(1);
+      expect(p.brightness).toBeGreaterThan(0);
+      expect(p.brightness).toBeLessThanOrEqual(0.75);
+    }
   });
 });

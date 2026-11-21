@@ -119,6 +119,7 @@ function create(ctx: AudioContext): Voice {
 
 export const glassPad: Preset = {
   id: 'glass-pad',
+  mode: 'continuous',
   scale: 'minpent',
   lowMidi: 45, // A2
   octaves: 2.5,

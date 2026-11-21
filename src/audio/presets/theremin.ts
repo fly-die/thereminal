@@ -151,6 +151,7 @@ function create(cfg: ThereminConfig, ctx: AudioContext): Voice {
 
 export const THEREMINS: readonly Preset[] = THEREMIN_VARIANTS.map((cfg) => ({
   id: cfg.id,
+  mode: 'continuous',
   scale: 'chromatic',
   lowMidi: 48, // C3
   octaves: 3,
