@@ -62,3 +62,8 @@ TypeScript, Vite, MediaPipe Tasks Vision, Web Audio API, Canvas 2D, Vitest, ESLi
 
 - [MediaPipe](https://github.com/google-ai-edge/mediapipe) hand landmark model and runtime, Apache 2.0.
 - One Euro filter by Casiez, Roussel and Vogel (2012).
+- [IBM Plex Mono](https://github.com/IBM/plex) typeface, OFL.
+
+## License
+
+[MIT](LICENSE).

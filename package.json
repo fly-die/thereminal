@@ -2,6 +2,7 @@
   "name": "thereminal",
   "private": true,
   "version": "0.0.1",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "setup": "node scripts/setup-assets.mjs",
