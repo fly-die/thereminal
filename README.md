@@ -6,6 +6,8 @@
 
 A synthesizer you play with your hands in the air. Runs in the browser.
 
+[![CI](https://github.com/fly-die/thereminal/actions/workflows/ci.yml/badge.svg)](https://github.com/fly-die/thereminal/actions/workflows/ci.yml)
+
 Status: in development. Not deployed yet.
 
 ## What it does
