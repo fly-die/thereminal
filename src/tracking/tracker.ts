@@ -22,11 +22,41 @@ export interface Tracker {
   start(video: HTMLVideoElement, onFrame: (frame: TrackedFrame) => void): void;
 }
 
-export async function createTracker(): Promise<Tracker> {
-  const fileset = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+const MODEL_URL = '/mediapipe/hand_landmarker.task';
+const MODEL_BYTES = 7_819_105; // fallback when the server sends no content length
+
+/** Downloads the model by hand so the boot log can show real progress. */
+async function fetchModel(onProgress: (fraction: number) => void): Promise<Uint8Array> {
+  const res = await fetch(MODEL_URL);
+  if (!res.ok || !res.body) throw new Error(`hand model failed to load (HTTP ${res.status})`);
+  const total = Number(res.headers.get('content-length')) || MODEL_BYTES;
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    onProgress(Math.min(0.99, received / total));
+  }
+  const model = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    model.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return model;
+}
+
+export async function createTracker(onProgress: (fraction: number) => void): Promise<Tracker> {
+  const [fileset, model] = await Promise.all([
+    FilesetResolver.forVisionTasks('/mediapipe/wasm'),
+    fetchModel(onProgress),
+  ]);
   const make = (delegate: 'GPU' | 'CPU') =>
     HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: '/mediapipe/hand_landmarker.task', delegate },
+      baseOptions: { modelAssetBuffer: model, delegate },
       runningMode: 'VIDEO',
       numHands: 2,
     });

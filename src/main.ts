@@ -1,29 +1,39 @@
-// App shell: boot, wiring between tracking, mapping, audio and the view, keyboard.
+// App shell: boot, wiring between tracking, mapping, audio, render and ui.
 
+import './ui/style.css';
 import { Engine } from './audio/engine';
 import { PRESETS } from './audio/presets';
-import { FistDetector, assignRoles, extractFeatures, rawOpenness } from './input/hands';
+import type { Preset } from './audio/presets';
+import { startDemo } from './input/demo';
+import { FistDetector, assignRoles, extractFeatures } from './input/hands';
 import type { HandFeatures, Point } from './input/hands';
 import { clamp01, heightToUnit, unitToHeight } from './input/mapping';
 import { OneEuro } from './input/oneEuro';
-import {
-  Quantizer,
-  SCALES,
-  SCALE_IDS,
-  midiToFreq,
-  midiToName,
-  scaleNotesInRange,
-} from './input/scales';
-import type { ScaleId } from './input/scales';
+import { PinchDetector, pinchDistances } from './input/pinch';
+import { Quantizer, SCALES, chordNote, midiToFreq, midiToName, scaleNotesInRange } from './input/scales';
+import { Ruler } from './render/ruler';
+import { Scope } from './render/scope';
 import { View } from './render/view';
-import type { Guide, HandView, LegendRow } from './render/view';
+import type { Guide, HandView } from './render/view';
+import { settings, subscribe } from './state';
 import { createTracker } from './tracking/tracker';
 import type { TrackedFrame, Tracker } from './tracking/tracker';
+import { Boot } from './ui/boot';
+import { buildCommands, handleKey } from './ui/commands';
+import type { Shell } from './ui/commands';
+import { Help } from './ui/help';
+import { Palette } from './ui/palette';
+import { Panels } from './ui/panels';
+import type { LiveControls } from './ui/panels';
+import { colors, initTheme, reducedMotion } from './ui/theme';
 
 const HOLD_MS = 150; // keep sounding this long after the hand is lost
 const SOLO_VOLUME = 0.7; // level when there is no second hand to set it
 const CLOSED_LEVEL = 0.35; // how quiet a nearly closed hand gets before the fist mutes
-const ROOT = 0; // C, root key selection comes with the full keyboard map
+const LOW_LIGHT = 0.12; // mean camera brightness below which hands are hard to find
+const STRIKE_VELOCITY = 0.9;
+
+const demo = new URLSearchParams(location.search).has('demo');
 
 const must = <T extends Element>(sel: string): T => {
   const el = document.querySelector<T>(sel);
@@ -32,68 +42,75 @@ const must = <T extends Element>(sel: string): T => {
 };
 
 const video = must<HTMLVideoElement>('#cam');
-const boot = must<HTMLElement>('#boot');
-const statusEl = must<HTMLElement>('#status');
+const hint = must<HTMLElement>('#hint');
+const notice = must<HTMLElement>('#notice');
+
+initTheme();
 const view = new View(must<HTMLCanvasElement>('#view'), video);
+const ruler = new Ruler(must<HTMLCanvasElement>('#ruler'));
+const scope = new Scope(must<HTMLCanvasElement>('#scope'));
+const panels = new Panels();
+const help = new Help(must<HTMLElement>('#help'));
+
+const shell: Shell = {
+  toggleHelp: () => help.toggle(),
+  openPalette: () => palette.show(),
+  closeOverlays: () => {
+    const any = help.open || palette.open;
+    help.close();
+    palette.close();
+    return any;
+  },
+};
+const palette = new Palette(must<HTMLElement>('#palette'), buildCommands(shell));
 
 // ---------- state ----------
 let engine: Engine | null = null;
 let tracker: Tracker | null = null;
-let preset = PRESETS[0]!;
-let scale: ScaleId = preset.scale;
-let muted = false;
-let smoothing = true;
-let color = false;
 
 let hands: HandView[] = [];
 let guides: Guide[] = [];
 let lastSeen = -Infinity;
 let tracked = false;
+let everTracked = false;
 let level = 0;
-let midi: number | null = null;
-let openRaw = 0;
-let legend: LegendRow[] = [];
+let note: number | null = null;
+let handY: number | null = null;
+let pulseAt = -Infinity;
+let darkSince: number | null = null;
 
 const filter = (): OneEuro => new OneEuro({ minCutoff: 1.2, beta: 8, dCutoff: 1 });
 const f = { py: filter(), px: filter(), po: filter(), vy: filter() };
 const fist = new FistDetector();
+const pinch = new PinchDetector();
 const quantizer = new Quantizer();
+
+const preset = (): Preset => PRESETS[settings.preset] ?? (PRESETS[0] as Preset);
+const lowMidi = (): number => preset().lowMidi + settings.octave * 12;
 
 // ---------- metrics ----------
 const ema = (prev: number, next: number): number => (prev === 0 ? next : prev + 0.1 * (next - prev));
 let inferMs = 0;
-let captureAgeMs = 0;
 let frames = 0;
 let trackFps = 0;
-let draws = 0;
-let drawFps = 0;
 let lastFpsAt = performance.now();
 
 function rebuildGuides(): void {
-  const high = preset.lowMidi + preset.octaves * 12;
+  const p = preset();
+  const low = lowMidi();
   // With the scale off there is nothing to snap to, so only octaves are marked.
-  const notes = scaleNotesInRange(preset.lowMidi, high, ROOT, SCALES[scale] ?? [0]);
-  guides = notes.map((note) => ({
-    y: unitToHeight((note - preset.lowMidi) / (preset.octaves * 12)),
-    name: midiToName(note),
+  const notes = scaleNotesInRange(low, low + p.octaves * 12, settings.root, SCALES[settings.scale] ?? [0]);
+  guides = notes.map((n) => ({
+    y: unitToHeight((n - low) / (p.octaves * 12)),
+    note: n,
+    name: midiToName(n),
     active: false,
   }));
   quantizer.reset();
 }
 
-function selectPreset(index: number): void {
-  const next = PRESETS[index];
-  if (!next) return;
-  preset = next;
-  scale = next.scale;
-  engine?.setPreset(next);
-  rebuildGuides();
-  legend = buildLegend(null);
-}
-
 function onFrame(frame: TrackedFrame): void {
   inferMs = ema(inferMs, frame.inferMs);
-  if (frame.captureAgeMs !== null) captureAgeMs = ema(captureAgeMs, frame.captureAgeMs);
   frames++;
 
   const points = new Map<HandFeatures, Point[]>();
@@ -109,25 +126,28 @@ function onFrame(frame: TrackedFrame): void {
   if (!roles.pitch) return; // the render loop handles hold and release
   lastSeen = frame.time;
   tracked = true;
+  if (!everTracked) {
+    everTracked = true;
+    hint.hidden = true;
+  }
 
+  const p = preset();
   const t = frame.time / 1000;
-  const smooth = (flt: OneEuro, v: number): number => (smoothing ? flt.filter(v, t) : v);
+  const smooth = (flt: OneEuro, v: number): number => (settings.smoothing ? flt.filter(v, t) : v);
 
   const y = smooth(f.py, roles.pitch.y);
   const x = smooth(f.px, roles.pitch.x);
   const open = smooth(f.po, roles.pitch.openness);
-  openRaw = rawOpenness(world.get(roles.pitch) ?? points.get(roles.pitch) ?? []) ?? 0;
+  handY = y;
 
-  let note = preset.lowMidi + heightToUnit(y) * preset.octaves * 12;
-  const scaleNotes = SCALES[scale];
-  if (scaleNotes) note = quantizer.next(note, ROOT, scaleNotes);
-  midi = note;
+  // Height picks the note: snapped to the scale, or to semitones for struck notes.
+  const scaleNotes = SCALES[settings.scale];
+  const unit = heightToUnit(y);
+  let pitch = lowMidi() + unit * p.octaves * 12;
+  if (scaleNotes) pitch = quantizer.next(pitch, settings.root, scaleNotes);
+  else if (p.mode === 'pluck') pitch = Math.round(pitch);
 
-  // Three controls on the playing hand, one on the other:
-  //   up/down = pitch, left/right = preset timbre, open/close = louder and brighter,
-  //   fist = mute, second hand up/down = volume.
   const timbre = clamp01((x - 0.1) / 0.8);
-  const isFist = fist.update(open);
   let volume = SOLO_VOLUME;
   if (roles.volume) {
     volume = heightToUnit(smooth(f.vy, roles.volume.y));
@@ -135,17 +155,40 @@ function onFrame(frame: TrackedFrame): void {
     f.vy.reset();
   }
 
-  level = muted || isFist ? 0 : volume * (CLOSED_LEVEL + (1 - CLOSED_LEVEL) * open);
-  engine?.update({ hz: midiToFreq(note), level, timbre, macro: open });
+  let isFist = false;
+  if (p.mode === 'pluck') {
+    // The hand is busy pinching, so openness does not gate the sound here.
+    level = settings.muted ? 0 : volume;
+    engine?.update({ hz: null, level, timbre, macro: open });
+    const distances = pinchDistances(world.get(roles.pitch) ?? points.get(roles.pitch) ?? []);
+    const struck = distances ? pinch.update(distances) : null;
+    if (struck !== null && !settings.muted) {
+      const played = chordNote(pitch, struck, settings.root, scaleNotes);
+      engine?.trigger(midiToFreq(played), STRIKE_VELOCITY);
+      pulseAt = frame.time;
+    }
+  } else {
+    // Up/down = pitch, left/right = preset timbre, open/close = louder and brighter,
+    // fist = mute, second hand up/down = volume.
+    isFist = fist.update(open);
+    level = settings.muted || isFist ? 0 : volume * (CLOSED_LEVEL + (1 - CLOSED_LEVEL) * open);
+    engine?.update({ hz: midiToFreq(pitch), level, timbre, macro: open });
+    if (note !== null && Math.round(note) !== Math.round(pitch)) pulseAt = frame.time;
+  }
+  const changed = note === null || Math.round(note) !== Math.round(pitch);
+  note = pitch;
+  if (changed) updateStatus();
 
-  const name = midiToName(note);
-  for (const guide of guides) guide.active = scaleNotes !== null && guide.name === name;
+  const name = midiToName(pitch);
+  for (const guide of guides) guide.active = guide.note === Math.round(pitch);
+  const verb = p.mode === 'pluck' ? 'note' : 'pitch';
   const next: HandView[] = [
     {
       role: 'pitch',
       points: points.get(roles.pitch) ?? [],
-      title: isFist ? 'fist: muted' : `pitch ${name}`,
-      detail: `${preset.timbreLabel} ${timbre.toFixed(2)}  open ${open.toFixed(2)}`,
+      title: isFist ? 'fist: muted' : `${verb} ${name}`,
+      detail: `${p.timbreLabel} ${timbre.toFixed(2)}  open ${open.toFixed(2)}`,
+      pinch: p.mode === 'pluck' ? pinch.finger : null,
     },
   ];
   if (roles.volume) {
@@ -153,105 +196,154 @@ function onFrame(frame: TrackedFrame): void {
       role: 'volume',
       points: points.get(roles.volume) ?? [],
       title: `volume ${(volume * 100).toFixed(0)}%`,
-      detail: 'up/down',
+      detail: 'up / down',
+      pinch: null,
     });
   }
   hands = next;
-  legend = buildLegend({ name, unit: heightToUnit(y), timbre, open, isFist, volume: roles.volume ? volume : null });
+
+  const live: LiveControls = {
+    note: name,
+    unit,
+    timbre,
+    open,
+    isFist,
+    volume: roles.volume ? volume : null,
+    pinch: p.mode === 'pluck' ? pinch.finger : null,
+  };
+  panels.updateControls(live);
 }
 
-interface LegendInput {
-  name: string;
-  unit: number;
-  timbre: number;
-  open: number;
-  isFist: boolean;
-  volume: number | null;
-}
-
-/** The on-screen answer to "what does my hand do". Pass null while no hand is visible. */
-function buildLegend(live: LegendInput | null): LegendRow[] {
-  return [
-    { gesture: 'up / down', effect: 'pitch', value: live?.unit ?? null, text: live?.name ?? '' },
-    { gesture: 'left / right', effect: preset.timbreLabel, value: live?.timbre ?? null, text: '' },
-    {
-      gesture: 'open / close',
-      effect: `loud + ${preset.macroLabel}`,
-      value: live?.open ?? null,
-      text: live?.isFist ? 'mute' : '',
-    },
-    { gesture: 'fist', effect: 'mute', value: null, text: live?.isFist ? 'on' : '' },
-    {
-      gesture: '2nd hand up / down',
-      effect: 'volume',
-      value: live?.volume ?? null,
-      text: live && live.volume === null ? 'raise a 2nd hand' : '',
-    },
-  ];
-}
-
+/** Hand gone (or preset changed): let the sound go and forget the smoothing history. */
 function release(): void {
   tracked = false;
   hands = [];
   level = 0;
-  midi = null;
+  note = null;
+  handY = null;
   for (const guide of guides) guide.active = false;
   for (const flt of Object.values(f)) flt.reset();
   fist.reset();
+  pinch.reset();
   quantizer.reset();
-  legend = buildLegend(null);
   engine?.silence();
+  panels.updateControls(null);
 }
 
 function render(now: number): void {
   requestAnimationFrame(render);
-  draws++;
   if (tracked && now - lastSeen > HOLD_MS) release();
-  view.draw({ hands, guides, legend, level, color }, now);
+
+  const motion = !reducedMotion();
+  view.draw(
+    { hands, guides, level, pulseAt, camera: settings.camera, overlay: settings.overlay, motion },
+    colors,
+    now,
+  );
+  ruler.draw({ guides, handY }, colors);
+  scope.draw(engine?.analyser ?? null, colors);
 
   if (now - lastFpsAt >= 1000) {
-    const dt = (now - lastFpsAt) / 1000;
-    trackFps = frames / dt;
-    drawFps = draws / dt;
+    trackFps = frames / ((now - lastFpsAt) / 1000);
     frames = 0;
-    draws = 0;
     lastFpsAt = now;
     updateStatus();
+    checkLight(now);
   }
 }
 
 function updateStatus(): void {
-  const parts = [
-    'thereminal',
-    `preset ${preset.id}`,
-    `scale ${scale === 'off' ? 'off' : `C ${scale}`}`,
-    muted ? 'muted' : midi === null ? 'silent' : midiToName(midi),
-    `hands ${hands.length}`,
-    `open raw ${openRaw.toFixed(2)}`,
-    `track ${trackFps.toFixed(0)}/${drawFps.toFixed(0)}fps`,
-    `infer ${inferMs.toFixed(1)}ms (${tracker?.delegate ?? '?'})`,
-    `cam>landmark ${captureAgeMs ? `${captureAgeMs.toFixed(0)}ms` : 'n/a'}`,
-    `audio out ${(engine?.outputLatencyMs ?? 0).toFixed(0)}ms`,
-  ];
-  const keys = `[1-${PRESETS.length}] preset  [s] scale  [v] camera  [f] smoothing ${smoothing ? 'on' : 'off'}  [space] mute`;
-  statusEl.textContent = `${parts.join(' │ ')}\n${keys}`;
+  panels.updateStatus({
+    note: note === null ? '' : midiToName(note),
+    hands: hands.length,
+    trackFps,
+    inferMs,
+    outMs: engine?.outputLatencyMs ?? 0,
+  });
 }
+
+/** A dark room is the most common reason tracking fails, so say it. */
+function checkLight(now: number): void {
+  const dark = settings.camera !== 'off' && !tracked && view.cameraLayer.brightness < LOW_LIGHT;
+  if (!dark) darkSince = null;
+  else darkSince ??= now;
+  const show = darkSince !== null && now - darkSince > 2000;
+  notice.hidden = !show;
+  if (show) notice.textContent = "can't see your hands, more light helps";
+}
+
+// ---------- settings ----------
+subscribe((changed) => {
+  switch (changed) {
+    case 'preset':
+      release();
+      engine?.setPreset(preset());
+      rebuildGuides();
+      panels.renderPresets();
+      panels.renderControls();
+      break;
+    case 'scale':
+    case 'root':
+    case 'octave':
+      rebuildGuides();
+      break;
+    case 'muted':
+      if (settings.muted) engine?.silence();
+      break;
+    case 'smoothing':
+      for (const flt of Object.values(f)) flt.reset();
+      break;
+  }
+  panels.renderSetup();
+  updateStatus();
+});
 
 // ---------- boot ----------
 let started = false;
+const boot = new Boot(must<HTMLElement>('#boot'), () => void start());
+
+boot.set('title', 'thereminal v0.1');
+boot.set('model', 'loading hand model', demo ? 'skipped (demo)' : '0%', 'wait');
+boot.set('audio', 'initializing audio', 'waiting for input', 'wait');
+boot.set('camera', 'camera', '[press enter / tap to allow]', 'wait');
+boot.set('privacy', 'all processing stays on this device. nothing is uploaded.');
+boot.start();
+
+// The model starts loading right away, the camera and audio need the user gesture.
+const trackerReady: Promise<Tracker | null> = demo
+  ? Promise.resolve(null)
+  : createTracker((fraction) => boot.set('model', 'loading hand model', `${Math.round(fraction * 100)}%`, 'wait'));
+trackerReady.then(
+  (t) => {
+    if (t) boot.set('model', 'loading hand model', `ok (${t.delegate.toLowerCase()})`, 'ok');
+  },
+  (err: unknown) => boot.set('model', 'loading hand model', err instanceof Error ? err.message : String(err), 'err'),
+);
+
+function cameraError(err: unknown): string {
+  const name = err instanceof Error ? err.name : '';
+  if (name === 'NotAllowedError') return 'blocked. allow the camera for this site, then press enter';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'no camera found';
+  if (name === 'NotReadableError') return 'in use by another app';
+  return err instanceof Error ? err.message : String(err);
+}
 
 async function start(): Promise<void> {
   if (started) return;
   started = true;
-  const log = (line: string): void => {
-    boot.textContent += `\n> ${line}`;
-  };
   try {
     engine ??= new Engine(); // must happen inside the user gesture
     await engine.ctx.resume();
-    engine.setPreset(preset);
-    log('audio ok');
+    engine.setPreset(preset());
+    boot.set('audio', 'initializing audio', 'ok', 'ok');
+  } catch (err) {
+    started = false;
+    boot.set('audio', 'initializing audio', err instanceof Error ? err.message : String(err), 'err');
+    return;
+  }
 
+  try {
+    boot.set('camera', 'camera', 'asking', 'wait');
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 }, facingMode: 'user' },
@@ -259,55 +351,43 @@ async function start(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     const s = stream.getVideoTracks()[0]?.getSettings();
-    log(`camera ok ${s?.width ?? '?'}x${s?.height ?? '?'} @ ${s?.frameRate?.toFixed(0) ?? '?'}fps`);
-
-    log('loading hand model');
-    const t = performance.now();
-    tracker = await createTracker();
-    log(`hand model ok (${tracker.delegate}, ${(performance.now() - t).toFixed(0)}ms)`);
-    await document.fonts.load('12px "IBM Plex Mono"').catch(() => undefined);
-
-    boot.hidden = true;
-    rebuildGuides();
-    legend = buildLegend(null);
-    tracker.start(video, onFrame);
-    requestAnimationFrame(render);
+    boot.set('camera', 'camera', `ok (${s?.width ?? '?'}x${s?.height ?? '?'}, ${s?.frameRate?.toFixed(0) ?? '?'}fps)`, 'ok');
   } catch (err) {
-    started = false;
-    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-    log(`failed: ${msg}`);
-    log('[press enter / tap to retry]');
+    if (!demo) {
+      started = false;
+      boot.set('camera', 'camera', cameraError(err), 'err');
+      return;
+    }
+    boot.set('camera', 'camera', 'none (demo)', 'ok');
   }
+
+  try {
+    tracker = await trackerReady;
+  } catch {
+    started = false; // the model line already shows what went wrong
+    return;
+  }
+  await document.fonts.load('12px "IBM Plex Mono"').catch(() => undefined);
+
+  boot.hide();
+  hint.hidden = false;
+  rebuildGuides();
+  updateStatus();
+  if (tracker) tracker.start(video, onFrame);
+  else startDemo(onFrame);
+  requestAnimationFrame(render);
 }
 
-boot.addEventListener('click', () => void start());
 window.addEventListener('keydown', (e) => {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const digit = Number.parseInt(e.key, 10);
-  if (digit >= 1 && digit <= PRESETS.length) selectPreset(digit - 1);
-  switch (e.key) {
-    case 'Enter':
-      void start();
-      break;
-    case 's':
-      scale = SCALE_IDS[(SCALE_IDS.indexOf(scale) + 1) % SCALE_IDS.length] ?? 'off';
-      rebuildGuides();
-      break;
-    case 'f':
-      smoothing = !smoothing;
-      for (const flt of Object.values(f)) flt.reset();
-      break;
-    case 'v':
-      color = !color;
-      break;
-    case ' ':
-      e.preventDefault();
-      muted = !muted;
-      if (muted) engine?.silence();
-      break;
+  if (e.key === 'Enter' && !started && !(e.target instanceof HTMLInputElement)) {
+    void start();
+    return;
   }
-  updateStatus();
+  handleKey(e, shell);
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) release();
 });
+
+rebuildGuides();
+updateStatus();
