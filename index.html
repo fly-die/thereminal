@@ -24,12 +24,12 @@
     <div id="app">
       <section class="panel" id="p-pitch">
         <h2>pitch</h2>
-        <canvas id="ruler" role="img" aria-label="notes of the current scale, with the playing note marked"></canvas>
+        <canvas id="ruler" aria-label="notes of the current scale, with the playing note marked"></canvas>
       </section>
       <section class="panel" id="p-cam">
         <h2>camera <span id="cam-mode"></span></h2>
         <video id="cam" playsinline muted></video>
-        <canvas id="view" role="img" aria-label="camera view with the tracked hands drawn on top"></canvas>
+        <canvas id="view" aria-label="camera view with the tracked hands drawn on top"></canvas>
         <div id="hint" role="status" hidden>raise your hand</div>
         <div id="notice" role="status" aria-live="polite" hidden></div>
       </section>
@@ -49,7 +49,7 @@
       </aside>
       <section class="panel" id="p-scope">
         <h2>scope</h2>
-        <canvas id="scope" role="img" aria-label="oscilloscope and spectrum of the sound"></canvas>
+        <canvas id="scope" aria-label="oscilloscope and spectrum of the sound"></canvas>
       </section>
       <footer id="status"></footer>
     </div>

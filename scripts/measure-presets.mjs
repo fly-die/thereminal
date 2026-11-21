@@ -34,9 +34,10 @@ const measure = async () => {
     voice.setLevel(preset.mode === 'pluck' ? 0.7 : 0.7 * (0.35 + 0.65 * 0.8));
     if (voice.trigger) {
       for (const t of [0.1, 0.8, 1.5, 2.2, 2.9]) {
-        ctx.suspend(t).then(() => {
+        // Fire-and-forget on purpose: startRendering below is what gets awaited.
+        void ctx.suspend(t).then(() => {
           voice.trigger(hz, 0.9);
-          ctx.resume();
+          return ctx.resume();
         });
       }
     }

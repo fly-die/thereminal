@@ -81,7 +81,7 @@ export async function createTracker(onProgress: (fraction: number) => void): Pro
     const result = landmarker.detectForVideo(video, now);
     const t1 = performance.now();
     // Only trust the capture time when it is on the same clock as performance.now().
-    const age = captureTime === undefined ? NaN : t1 - captureTime;
+    const age = captureTime === undefined ? Number.NaN : t1 - captureTime;
     return {
       hands: result.landmarks,
       world: result.worldLandmarks,
