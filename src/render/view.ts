@@ -31,9 +31,18 @@ export interface Guide {
   active: boolean;
 }
 
+export interface LegendRow {
+  gesture: string;
+  effect: string;
+  /** 0..1 for a live meter, null when there is nothing to show. */
+  value: number | null;
+  text: string;
+}
+
 export interface Scene {
   hands: readonly HandView[];
   guides: readonly Guide[];
+  legend: readonly LegendRow[];
   /** Current output level 0..1, makes the overlay breathe with the sound. */
   level: number;
   color: boolean;
@@ -219,5 +228,64 @@ export class View {
       g.fillText(hand.detail, x0, y1 + 12 * dpr);
     }
     for (const role of this.shown.keys()) if (!live.has(role)) this.shown.delete(role);
+
+    this.drawLegend(scene.legend, ox, oy + h, font);
+  }
+
+  /** Panel in the bottom left corner, away from where hands play: gesture, target, live meter. */
+  private drawLegend(
+    rows: readonly LegendRow[],
+    left: number,
+    bottom: number,
+    font: (size: number) => string,
+  ): void {
+    if (rows.length === 0) return;
+    const { g, dpr } = this;
+    const pad = 12 * dpr;
+    const rowH = 20 * dpr;
+    const width = 400 * dpr;
+    const height = rows.length * rowH + pad * 2;
+    const x = Math.round(left + 14 * dpr) + 0.5;
+    const y = Math.round(bottom - height - 14 * dpr) + 0.5;
+
+    g.fillStyle = 'rgba(7, 7, 7, 0.82)';
+    g.fillRect(x, y, width, height);
+    g.strokeStyle = '#3a3a3a';
+    g.lineWidth = dpr;
+    g.strokeRect(x, y, width, height);
+
+    g.font = font(11);
+    g.textBaseline = 'middle';
+    const title = ' controls ';
+    g.fillStyle = '#070707';
+    g.fillRect(x + pad, y - 6 * dpr, g.measureText(title).width, 12 * dpr);
+    g.fillStyle = GREY;
+    g.fillText(title, x + pad, y);
+
+    const segments = 10;
+    const segW = 6 * dpr;
+    const segGap = 2 * dpr;
+    rows.forEach((row, i) => {
+      const cy = y + pad + rowH * (i + 0.5);
+      const on = row.value !== null || row.text === 'on';
+      g.fillStyle = on ? '#ededea' : GREY;
+      g.fillText(row.gesture, x + pad, cy);
+      g.fillStyle = on ? `rgb(${ACCENT})` : GREY;
+      g.fillText(row.effect, x + pad + 150 * dpr, cy);
+
+      const mx = x + pad + 262 * dpr;
+      if (row.value !== null) {
+        const filled = Math.round(row.value * segments);
+        for (let n = 0; n < segments; n++) {
+          g.fillStyle = n < filled ? `rgb(${ACCENT})` : 'rgba(255, 255, 255, 0.14)';
+          g.fillRect(mx + n * (segW + segGap), cy - 5 * dpr, segW, 10 * dpr);
+        }
+      }
+      if (row.text) {
+        g.fillStyle = row.value !== null || row.text === 'on' ? `rgb(${ACCENT})` : GREY;
+        const tx = row.value !== null ? mx + segments * (segW + segGap) + 6 * dpr : mx;
+        g.fillText(row.text, tx, cy);
+      }
+    });
   }
 }

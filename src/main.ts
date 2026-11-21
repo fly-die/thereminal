@@ -16,12 +16,13 @@ import {
 } from './input/scales';
 import type { ScaleId } from './input/scales';
 import { View } from './render/view';
-import type { Guide, HandView } from './render/view';
+import type { Guide, HandView, LegendRow } from './render/view';
 import { createTracker } from './tracking/tracker';
 import type { TrackedFrame, Tracker } from './tracking/tracker';
 
 const HOLD_MS = 150; // keep sounding this long after the hand is lost
 const SOLO_VOLUME = 0.7; // level when there is no second hand to set it
+const CLOSED_LEVEL = 0.35; // how quiet a nearly closed hand gets before the fist mutes
 const ROOT = 0; // C, root key selection comes with the full keyboard map
 
 const must = <T extends Element>(sel: string): T => {
@@ -51,11 +52,11 @@ let tracked = false;
 let level = 0;
 let midi: number | null = null;
 let openRaw = 0;
+let legend: LegendRow[] = [];
 
 const filter = (): OneEuro => new OneEuro({ minCutoff: 1.2, beta: 8, dCutoff: 1 });
-const f = { py: filter(), px: filter(), po: filter(), vy: filter(), vo: filter() };
-const fistPitch = new FistDetector();
-const fistVolume = new FistDetector();
+const f = { py: filter(), px: filter(), po: filter(), vy: filter() };
+const fist = new FistDetector();
 const quantizer = new Quantizer();
 
 // ---------- metrics ----------
@@ -87,6 +88,7 @@ function selectPreset(index: number): void {
   scale = next.scale;
   engine?.setPreset(next);
   rebuildGuides();
+  legend = buildLegend(null);
 }
 
 function onFrame(frame: TrackedFrame): void {
@@ -121,23 +123,20 @@ function onFrame(frame: TrackedFrame): void {
   if (scaleNotes) note = quantizer.next(note, ROOT, scaleNotes);
   midi = note;
 
+  // Three controls on the playing hand, one on the other:
+  //   up/down = pitch, left/right = preset timbre, open/close = louder and brighter,
+  //   fist = mute, second hand up/down = volume.
+  const timbre = clamp01((x - 0.1) / 0.8);
+  const isFist = fist.update(open);
   let volume = SOLO_VOLUME;
-  let macro = open; // one hand alone also shapes the sound by opening and closing
-  let fist = fistPitch.update(open);
-  let volumeOpen = 0;
   if (roles.volume) {
     volume = heightToUnit(smooth(f.vy, roles.volume.y));
-    volumeOpen = smooth(f.vo, roles.volume.openness);
-    macro = volumeOpen;
-    fist = fistVolume.update(volumeOpen) || fist;
   } else {
     f.vy.reset();
-    f.vo.reset();
-    fistVolume.reset();
   }
 
-  level = muted || fist ? 0 : volume;
-  engine?.update({ hz: midiToFreq(note), level, timbre: clamp01((x - 0.1) / 0.8), macro });
+  level = muted || isFist ? 0 : volume * (CLOSED_LEVEL + (1 - CLOSED_LEVEL) * open);
+  engine?.update({ hz: midiToFreq(note), level, timbre, macro: open });
 
   const name = midiToName(note);
   for (const guide of guides) guide.active = scaleNotes !== null && guide.name === name;
@@ -145,8 +144,8 @@ function onFrame(frame: TrackedFrame): void {
     {
       role: 'pitch',
       points: points.get(roles.pitch) ?? [],
-      title: `pitch ${name}${fist ? '  [fist: mute]' : ''}`,
-      detail: `${preset.timbreLabel} ${x.toFixed(2)}  open ${open.toFixed(2)}`,
+      title: isFist ? 'fist: muted' : `pitch ${name}`,
+      detail: `${preset.timbreLabel} ${timbre.toFixed(2)}  open ${open.toFixed(2)}`,
     },
   ];
   if (roles.volume) {
@@ -154,10 +153,41 @@ function onFrame(frame: TrackedFrame): void {
       role: 'volume',
       points: points.get(roles.volume) ?? [],
       title: `volume ${(volume * 100).toFixed(0)}%`,
-      detail: `${preset.macroLabel} ${volumeOpen.toFixed(2)}`,
+      detail: 'up/down',
     });
   }
   hands = next;
+  legend = buildLegend({ name, unit: heightToUnit(y), timbre, open, isFist, volume: roles.volume ? volume : null });
+}
+
+interface LegendInput {
+  name: string;
+  unit: number;
+  timbre: number;
+  open: number;
+  isFist: boolean;
+  volume: number | null;
+}
+
+/** The on-screen answer to "what does my hand do". Pass null while no hand is visible. */
+function buildLegend(live: LegendInput | null): LegendRow[] {
+  return [
+    { gesture: 'up / down', effect: 'pitch', value: live?.unit ?? null, text: live?.name ?? '' },
+    { gesture: 'left / right', effect: preset.timbreLabel, value: live?.timbre ?? null, text: '' },
+    {
+      gesture: 'open / close',
+      effect: `loud + ${preset.macroLabel}`,
+      value: live?.open ?? null,
+      text: live?.isFist ? 'mute' : '',
+    },
+    { gesture: 'fist', effect: 'mute', value: null, text: live?.isFist ? 'on' : '' },
+    {
+      gesture: '2nd hand up / down',
+      effect: 'volume',
+      value: live?.volume ?? null,
+      text: live && live.volume === null ? 'raise a 2nd hand' : '',
+    },
+  ];
 }
 
 function release(): void {
@@ -167,9 +197,9 @@ function release(): void {
   midi = null;
   for (const guide of guides) guide.active = false;
   for (const flt of Object.values(f)) flt.reset();
-  fistPitch.reset();
-  fistVolume.reset();
+  fist.reset();
   quantizer.reset();
+  legend = buildLegend(null);
   engine?.silence();
 }
 
@@ -177,7 +207,7 @@ function render(now: number): void {
   requestAnimationFrame(render);
   draws++;
   if (tracked && now - lastSeen > HOLD_MS) release();
-  view.draw({ hands, guides, level, color }, now);
+  view.draw({ hands, guides, legend, level, color }, now);
 
   if (now - lastFpsAt >= 1000) {
     const dt = (now - lastFpsAt) / 1000;
@@ -239,6 +269,7 @@ async function start(): Promise<void> {
 
     boot.hidden = true;
     rebuildGuides();
+    legend = buildLegend(null);
     tracker.start(video, onFrame);
     requestAnimationFrame(render);
   } catch (err) {
