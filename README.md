@@ -25,7 +25,12 @@ Status: in development. Not deployed yet.
 | Second hand up / down | Volume |
 | Pinch thumb and finger | Strike a note (fm-bell, kalimba) |
 
-Keys: `1-6` preset, `space` mute, `s` scale, `k` root key, `[` `]` octave, `v` camera style, `h` hand overlay, `a` accent colour, `T` dark or light, `?` help, `Cmd+K` or `Ctrl+K` all commands.
+Keys: `1-6` preset, `space` mute, `s` scale, `k` root key, `[` `]` octave, `v` camera style, `h` hand overlay, `a` accent colour, `T` dark or light, `r` record, `?` help, `Cmd+K` or `Ctrl+K` all commands.
+
+- **No camera?** The pointer plays instead: move over the frame, press to strike.
+- **Record:** `r` saves up to 30 seconds of the camera view and sound as a video file.
+- **Share:** the address bar always holds the current sound, for example `?p=glass-pad&s=minpent&k=C`.
+- **Phone:** the camera fills the screen and the panels open from `menu`.
 
 ## How it works
 
