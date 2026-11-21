@@ -10,6 +10,10 @@ A synthesizer you play with your hands in the air. Runs in the browser.
 
 Live: [thereminal.vercel.app](https://thereminal.vercel.app)
 
+<p align="center">
+  <img src="docs/demo.gif" alt="Two hands in front of a webcam, drawn as ASCII, playing the sub-reese preset" width="640">
+</p>
+
 ## What it does
 
 - **Tracks** your hands through the webcam, 21 points per hand.
