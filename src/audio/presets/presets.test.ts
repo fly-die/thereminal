@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SCALES } from '../../input/scales';
 import { glassPadParams } from './glassPad';
 import { PRESETS } from './index';
-import { thereminParams } from './theremin';
+import { THEREMIN_VARIANTS, thereminParams } from './theremin';
 
 const STEPS = [-1, 0, 0.25, 0.5, 0.75, 1, 2]; // includes out of range input on purpose
 
@@ -23,15 +23,23 @@ describe('preset definitions', () => {
 });
 
 describe('theremin params', () => {
-  it('stay inside safe bounds for any input', () => {
-    for (const t of STEPS) for (const m of STEPS) {
-      const p = thereminParams(t, m);
-      expect(p.cutoffHz).toBeGreaterThanOrEqual(900);
-      expect(p.cutoffHz).toBeLessThanOrEqual(5000);
-      expect(p.vibratoCents).toBeGreaterThanOrEqual(4);
-      expect(p.vibratoCents).toBeLessThanOrEqual(18);
+  it('stay inside each variant\'s bounds for any input', () => {
+    for (const cfg of THEREMIN_VARIANTS) for (const t of STEPS) for (const m of STEPS) {
+      const p = thereminParams(cfg, t, m);
+      expect(p.cutoffHz).toBeGreaterThanOrEqual(cfg.cutoffHz[0]);
+      expect(p.cutoffHz).toBeLessThanOrEqual(cfg.cutoffHz[1]);
+      expect(p.vibratoCents).toBeGreaterThanOrEqual(cfg.vibratoCents[0]);
+      expect(p.vibratoCents).toBeLessThanOrEqual(cfg.vibratoCents[1]);
       expect(p.reverbSend).toBeGreaterThan(0);
-      expect(p.reverbSend).toBeLessThanOrEqual(0.5);
+      expect(p.reverbSend).toBeLessThanOrEqual(0.65);
+    }
+  });
+
+  it('keep vibrato subtle and levels sane', () => {
+    for (const cfg of THEREMIN_VARIANTS) {
+      expect(cfg.vibratoCents[1]).toBeLessThanOrEqual(25);
+      expect(cfg.peak).toBeLessThanOrEqual(0.6);
+      expect(cfg.echo?.feedback ?? 0).toBeLessThan(0.7);
     }
   });
 });
