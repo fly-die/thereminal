@@ -20,8 +20,10 @@ const MIDDLE_KNUCKLE = 9;
 const PALM = [0, 5, 9, 13, 17] as const;
 const FINGERTIPS = [8, 12, 16, 20] as const; // thumb left out, it barely curls
 
-// Mean fingertip-to-palm distance in palm lengths. Estimated, to be tuned on real hands.
-const OPENNESS_FIST = 0.5;
+// Mean fingertip-to-palm distance in palm lengths. Measured on a real hand:
+// about 0.27 for a tight fist and 1.09 flat open. The range sits inside that so
+// both ends are reachable without straining.
+const OPENNESS_FIST = 0.35;
 const OPENNESS_OPEN = 1.0;
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
