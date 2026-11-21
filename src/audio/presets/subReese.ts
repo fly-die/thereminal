@@ -9,7 +9,7 @@ import type { Preset, Voice } from './types';
 // slower one on top.
 // Hand: left/right = filter cutoff, open hand = filter opens further and it growls.
 
-const PEAK = 0.4;
+const PEAK = 0.31;
 const DETUNE_CENTS = [-13, 0, 12] as const;
 
 export function subReeseParams(timbre: number, macro: number) {
@@ -20,7 +20,7 @@ export function subReeseParams(timbre: number, macro: number) {
   };
 }
 
-function create(ctx: AudioContext): Voice {
+function create(ctx: BaseAudioContext): Voice {
   const sources: OscillatorNode[] = [];
   const bus = new GainNode(ctx, { gain: 0.3 });
   const saws = DETUNE_CENTS.map((detune) => {

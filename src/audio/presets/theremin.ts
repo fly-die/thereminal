@@ -50,7 +50,7 @@ export const THEREMIN_VARIANTS: readonly ThereminConfig[] = [
     reverbSeconds: 3.5,
     reverbSend: [0.1, 0.65],
     echo: { time: 0.33, feedback: 0.35, mix: 0.22 },
-    peak: 0.55,
+    peak: 0.16, // a pure tone in the midrange reads much louder than its level suggests
   },
 ];
 
@@ -65,7 +65,7 @@ export function thereminParams(cfg: ThereminConfig, timbre: number, macro: numbe
 
 const VIBRATO_DELAY = 0.3;
 
-function create(cfg: ThereminConfig, ctx: AudioContext): Voice {
+function create(cfg: ThereminConfig, ctx: BaseAudioContext): Voice {
   const imag = new Float32Array(cfg.harmonics.length + 1);
   cfg.harmonics.forEach((amp, i) => {
     imag[i + 1] = amp;
@@ -158,5 +158,5 @@ export const THEREMINS: readonly Preset[] = THEREMIN_VARIANTS.map((cfg) => ({
   glide: 0.07,
   timbreLabel: 'space',
   macroLabel: 'bright',
-  create: (ctx: AudioContext) => create(cfg, ctx),
+  create: (ctx: BaseAudioContext) => create(cfg, ctx),
 }));

@@ -18,7 +18,7 @@ export function kalimbaParams(timbre: number) {
   };
 }
 
-function create(ctx: AudioContext): Voice {
+function create(ctx: BaseAudioContext): Voice {
   const bus = new GainNode(ctx, { gain: 0 });
   const highpass = new BiquadFilterNode(ctx, { type: 'highpass', frequency: 140 });
   const box = new BiquadFilterNode(ctx, { type: 'peaking', frequency: 420, Q: 2, gain: 6 });

@@ -28,5 +28,6 @@ export interface Preset {
   readonly glide: number;
   readonly timbreLabel: string;
   readonly macroLabel: string;
-  create(ctx: AudioContext): Voice;
+  /** Takes any audio context, so presets can also be rendered offline for measuring. */
+  create(ctx: BaseAudioContext): Voice;
 }

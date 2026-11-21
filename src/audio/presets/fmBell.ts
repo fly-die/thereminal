@@ -23,7 +23,7 @@ export function fmBellParams(timbre: number, macro: number) {
   };
 }
 
-function create(ctx: AudioContext): Voice {
+function create(ctx: BaseAudioContext): Voice {
   const bus = new GainNode(ctx, { gain: 0 });
   const output = new GainNode(ctx);
   bus.connect(output);

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { SCALES } from '../../input/scales';
+import { acidParams } from './acid';
 import { fmBellParams } from './fmBell';
 import { glassPadParams } from './glassPad';
 import { PRESETS } from './index';
 import { kalimbaParams } from './kalimba';
 import { subReeseParams } from './subReese';
 import { THEREMIN_VARIANTS, thereminParams } from './theremin';
+import { voxParams } from './vox';
 import { windParams } from './wind';
 
 const STEPS = [-1, 0, 0.25, 0.5, 0.75, 1, 2]; // includes out of range input on purpose
@@ -111,6 +113,31 @@ describe('kalimba params', () => {
       expect(p.sustain).toBeLessThan(1);
       expect(p.brightness).toBeGreaterThan(0);
       expect(p.brightness).toBeLessThanOrEqual(0.75);
+    }
+  });
+});
+
+describe('acid params', () => {
+  it('keep the sweep and resonance below self-oscillation', () => {
+    for (const t of STEPS) for (const m of STEPS) {
+      const p = acidParams(t, m);
+      expect(p.cutoffHz).toBeGreaterThanOrEqual(180);
+      expect(p.cutoffHz * p.sweep).toBeLessThanOrEqual(13000);
+      expect(p.resonance).toBeLessThanOrEqual(15);
+      expect(p.decaySeconds).toBeGreaterThan(0.1);
+    }
+  });
+});
+
+describe('vox params', () => {
+  it('keep the formants in the range of a human mouth, in order', () => {
+    for (const t of STEPS) for (const m of STEPS) {
+      const p = voxParams(t, m);
+      expect(p.f1).toBeGreaterThanOrEqual(300);
+      expect(p.f1).toBeLessThanOrEqual(760);
+      expect(p.f2).toBeGreaterThan(p.f1);
+      expect(p.f3).toBeGreaterThan(p.f2 - 1);
+      expect(p.f3).toBeLessThanOrEqual(3000);
     }
   });
 });

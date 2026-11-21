@@ -9,7 +9,7 @@ import type { Preset, Voice } from './types';
 //   the tail glow (a cheap stand-in for a shimmer reverb).
 // Hand: left/right = filter cutoff, open hand = brighter, more shimmer and more hall.
 
-const PEAK = 0.42;
+const PEAK = 0.55;
 const DETUNE_CENTS = [-17, -9, 0, 8, 16] as const;
 const PAN = [-0.8, -0.4, 0, 0.4, 0.8] as const;
 
@@ -22,7 +22,7 @@ export function glassPadParams(timbre: number, macro: number) {
   };
 }
 
-function create(ctx: AudioContext): Voice {
+function create(ctx: BaseAudioContext): Voice {
   const sources: OscillatorNode[] = [];
   const bus = new GainNode(ctx, { gain: 0.16 });
 

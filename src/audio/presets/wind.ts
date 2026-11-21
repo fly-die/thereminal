@@ -8,7 +8,7 @@ import type { Preset, Voice } from './types';
 // A narrow filter makes the noise whistle a note, a wide one is just air.
 // Hand: up/down = pitch of the whistle, left/right = air to whistle, open hand = more.
 
-const PEAK = 0.9;
+const PEAK = 1.5; // filtered noise carries little energy
 
 export function windParams(timbre: number, macro: number) {
   const q = expLerp(1.5, 28, timbre);
@@ -20,7 +20,7 @@ export function windParams(timbre: number, macro: number) {
   };
 }
 
-function create(ctx: AudioContext): Voice {
+function create(ctx: BaseAudioContext): Voice {
   const noise = new AudioBufferSourceNode(ctx, { buffer: makeNoise(ctx), loop: true });
   const low = new BiquadFilterNode(ctx, { type: 'bandpass', frequency: 600, Q: 6 });
   const high = new BiquadFilterNode(ctx, { type: 'bandpass', frequency: 900, Q: 6 });
