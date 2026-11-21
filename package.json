@@ -4,6 +4,9 @@
   "version": "0.0.1",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "setup": "node scripts/setup-assets.mjs",
     "predev": "node scripts/setup-assets.mjs",
@@ -13,7 +16,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "measure": "node scripts/measure-presets.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.2.3"
