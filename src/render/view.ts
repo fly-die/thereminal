@@ -67,9 +67,15 @@ export class View {
   private readonly shown = new Map<string, Point[]>();
   private readonly trails: Trail[] = [];
   private lastDraw = 0;
+  /** Where the camera frame sits inside the canvas, in canvas pixels. */
+  frame = { x: 0, y: 0, w: 4, h: 3 };
+  /** Canvas pixels per CSS pixel. */
+  get dpr(): number {
+    return this.size.dpr;
+  }
 
   constructor(
-    private readonly canvas: HTMLCanvasElement,
+    readonly canvas: HTMLCanvasElement,
     private readonly video: HTMLVideoElement,
   ) {
     this.g = context2d(canvas);
@@ -115,6 +121,7 @@ export class View {
     const h = vh * scale;
     const ox = (cw - w) / 2;
     const oy = (ch - h) / 2;
+    this.frame = { x: ox, y: oy, w, h };
     const px = (p: Point): number => ox + (1 - p.x) * w; // mirrored
     const py = (p: Point): number => oy + p.y * h;
 

@@ -26,6 +26,8 @@ export class Engine {
   /** Post-master tap for the scope and meters. */
   readonly analyser: AnalyserNode;
   private readonly input: GainNode;
+  private readonly master: GainNode;
+  private tap: MediaStreamAudioDestinationNode | null = null;
   private active: ActiveVoice | null = null;
   private preset: Preset | null = null;
 
@@ -44,6 +46,16 @@ export class Engine {
     this.analyser = new AnalyserNode(ctx, { fftSize: 2048 });
     this.input.connect(glue).connect(limiter).connect(master).connect(ctx.destination);
     master.connect(this.analyser);
+    this.master = master;
+  }
+
+  /** The final mix as a stream, for recording. Created on first use. */
+  get stream(): MediaStream {
+    if (!this.tap) {
+      this.tap = new MediaStreamAudioDestinationNode(this.ctx);
+      this.master.connect(this.tap);
+    }
+    return this.tap.stream;
   }
 
   get outputLatencyMs(): number {
