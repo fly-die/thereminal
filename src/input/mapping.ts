@@ -10,6 +10,11 @@ export function heightToUnit(y: number, margin = 0.1): number {
   return clamp01((1 - margin - y) / (1 - 2 * margin));
 }
 
+/** Inverse of heightToUnit, used to draw note guides where the hand has to be. */
+export function unitToHeight(unit: number, margin = 0.1): number {
+  return 1 - margin - clamp01(unit) * (1 - 2 * margin);
+}
+
 /** Play height to frequency. Exponential, so equal distance means equal interval. */
 export function unitToFreq(unit: number, lowHz: number, octaves: number): number {
   return lowHz * 2 ** (clamp01(unit) * octaves);

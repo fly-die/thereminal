@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { heightToUnit, unitToFreq } from './mapping';
+import { heightToUnit, unitToFreq, unitToHeight } from './mapping';
 
 describe('heightToUnit', () => {
   it('maps the usable band of the frame to 0..1, top is high', () => {
@@ -30,5 +30,11 @@ describe('unitToFreq', () => {
   it('never leaves the range', () => {
     expect(unitToFreq(-1, 110, 3)).toBeCloseTo(110);
     expect(unitToFreq(2, 110, 3)).toBeCloseTo(880);
+  });
+});
+
+describe('unitToHeight', () => {
+  it('is the inverse of heightToUnit', () => {
+    for (const u of [0, 0.2, 0.5, 0.9, 1]) expect(heightToUnit(unitToHeight(u))).toBeCloseTo(u);
   });
 });
