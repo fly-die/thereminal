@@ -363,7 +363,7 @@ boot.set('title', 'thereminal v0.1');
 boot.set('model', 'loading hand model', demo ? 'skipped (demo)' : '0%', 'wait');
 boot.set('audio', 'initializing audio', 'waiting for input', 'wait');
 boot.set('camera', 'camera', '[press enter / tap to allow]', 'wait');
-boot.set('privacy', 'all processing stays on this device. nothing is uploaded.');
+boot.set('privacy', 'camera and audio stay on this device. only anonymous page views are counted.');
 boot.start();
 
 // The model starts loading right away, the camera and audio need the user gesture.

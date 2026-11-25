@@ -39,7 +39,7 @@ export class Help {
     const note = document.createElement('p');
     note.className = 'panel-body';
     note.style.color = 'var(--dim)';
-    note.textContent = 'all processing stays on this device. nothing is uploaded.';
+    note.textContent = 'camera and audio stay on this device. only anonymous page views are counted.';
     panel.append(title, body, note);
     root.append(panel);
     root.addEventListener('click', (e) => {

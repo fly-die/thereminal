@@ -8,7 +8,7 @@ A synthesizer you play with your hands in the air. Runs in the browser.
 
 [![CI](https://github.com/fly-die/thereminal/actions/workflows/ci.yml/badge.svg)](https://github.com/fly-die/thereminal/actions/workflows/ci.yml)
 
-Live: [thereminal.vercel.app](https://thereminal.vercel.app)
+Live: [thereminal.flynndiener.ch](https://thereminal.flynndiener.ch)
 
 <p align="center">
   <img src="docs/demo.gif" alt="Two hands in front of a webcam, drawn as ASCII, playing the sub-reese preset" width="640">
@@ -50,7 +50,7 @@ Keys: `1-8` preset, `space` mute, `s` scale, `k` root key, `[` `]` octave, `v` c
 
 ## Privacy
 
-There is no backend. The page asks for the camera, runs the hand model in your browser and plays sound. No frames, landmarks or audio leave the device.
+There is no backend. The page asks for the camera, runs the hand model in your browser and plays sound. No frames, landmarks or audio leave the device. The only thing sent anywhere is an anonymous page view to Vercel Web Analytics (no cookies, no personal data).
 
 ## Run locally
 
